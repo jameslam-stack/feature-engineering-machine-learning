@@ -15,3 +15,9 @@ env/
 .pytest_cache/
 .coverage
 .ipynb_checkpoints/
+
+# Generated pipeline outputs (not source)
+data/processed.csv
+data/processed.parquet
+reports/
+models/

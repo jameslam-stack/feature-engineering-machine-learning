@@ -133,7 +133,12 @@ class FeatureEngineeringPipeline:
             self._log("Selection disabled"); return self
         method = self.config["feature_selection"]["method"]
         feature_df = self.df.select_dtypes(include=[np.number]).drop(columns=[self.target_col], errors="ignore")
-        X = feature_df
+        # Drop constant columns (zero variance) — they cause SelectKBest warnings
+        non_const = feature_df.columns[feature_df.nunique() > 1].tolist()
+        dropped = [c for c in feature_df.columns if c not in non_const]
+        if dropped:
+            self._log(f"Dropped constant columns: {dropped}")
+        X = feature_df[non_const] if non_const else feature_df
         y = self.df[self.target_col] if self.target_col in self.df.columns else pd.Series([0]*len(self.df))
         if y.dtype == object: y = pd.Categorical(y).codes
         if method == "select_k_best":
@@ -193,6 +198,7 @@ class FeatureEngineeringPipeline:
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         with open(path, "w") as f: f.write(f"<pre>{self.generate_report()}</pre>")
         self._log(f"Report saved to {path}")
+        return self
 
     def save_data(self, path=None, fmt=None):
         path = path or self.config["output"]["output_path"]
