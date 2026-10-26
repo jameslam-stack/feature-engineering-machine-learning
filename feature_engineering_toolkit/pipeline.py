@@ -29,8 +29,10 @@ class FeatureEngineeringPipeline:
         return self
 
     def load(self, path=None):
+        """Load a dataset from any path. Falls back to the bundled sample data if no path is given."""
         path = path or self.config["data_input"]["data_path"]
         p = Path(path)
+        # Search: given path → data/ in cwd → bundled sample in package data/
         candidates = [p, Path("data") / p.name, Path(__file__).parent.parent / "data" / p.name]
         for cand in candidates:
             if cand.exists():
@@ -211,5 +213,17 @@ class FeatureEngineeringPipeline:
     def get_engineered_data(self):
         return self.df.copy() if self.df is not None else pd.DataFrame()
 
-    def run(self):
-        return (self.load().handle_missing().create_features().transform().select_features().encode_advanced().evaluate().save_report().save_data())
+    def run(self, data_path=None):
+        """Run the full pipeline on a dataset.
+
+        Parameters
+        ----------
+        data_path : str or Path, optional
+            Path to any CSV/Parquet dataset. If None, uses the configured
+            path (falls back to the bundled sample data).
+
+        Returns
+        -------
+        self
+        """
+        return (self.load(data_path).handle_missing().create_features().transform().select_features().encode_advanced().evaluate().save_report().save_data())
