@@ -1,4 +1,9 @@
-"""Feature Engineering Pipeline — create, select, and transform features."""
+"""Feature Engineering Pipeline — create, select, and transform features.
+
+Supports both pandas and PySpark DataFrames via a backend abstraction.
+Part of the data-science pipeline: data cleaning → feature engineering →
+preprocessing → model building.
+"""
 import pandas as pd
 import numpy as np
 from datetime import datetime
@@ -10,15 +15,21 @@ from sklearn.feature_selection import SelectKBest, f_classif, RFE
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score
 
+from .backends import get_backend, DataFrameBackend
+
 class FeatureEngineeringPipeline:
     def __init__(self, df=None, config=None, target_col=None):
         from .config import DEFAULT_CONFIG
         self.config = config or DEFAULT_CONFIG.copy()
         self.df = df.copy() if df is not None else None
         self.target_col = target_col or self.config["data_input"]["target_variable"]
+        self.backend: DataFrameBackend = get_backend(self.df)
         self.created_features = []
         self.selected_features = []
         self.transformed_features = []
+        self.cleaned_features = []
+        self.model = None
+        self.predictions = None
         self.log = []
         self.original_shape = (0, 0)
         self.accuracy = None
@@ -26,6 +37,84 @@ class FeatureEngineeringPipeline:
     def _log(self, msg):
         entry = f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {msg}"
         self.log.append(entry); print(msg)
+        return self
+
+    def clean_data(self) -> "FeatureEngineeringPipeline":
+        """Data-cleaning stage: remove duplicates, fix types, drop empty rows.
+        Works for both pandas and PySpark via backend."""
+        self.backend = get_backend(self.df)
+        # Remove fully duplicate rows (pandas native; PySpark via dropDuplicates)
+        if self.backend.is_pandas:
+            before = len(self.df)
+            self.df = self.df.drop_duplicates()
+            after = len(self.df)
+            if before != after:
+                self._log(f"Clean: removed {before - after} duplicate rows")
+            self.df = self.df.reset_index(drop=True)
+        else:
+            # PySpark: dropDuplicates is native
+            self.df = self.df.dropDuplicates()
+            self._log("Clean: dropDuplicates applied (PySpark)")
+            self.cleaned_features.extend(["duplicate_removal"])
+        return self
+
+    def preprocess(self) -> "FeatureEngineeringPipeline":
+        """Preprocessing stage: split train/test, prepare for modelling.
+        Converts to pandas for sklearn-based model building if needed."""
+        # For sklearn evaluation / model building we need pandas
+        if self.backend.is_pyspark:
+            self._log("Preprocess: converting PySpark -> pandas for sklearn")
+            pandas_df = self.backend.to_pandas(self.df)
+            self.df = pandas_df
+            self.backend = get_backend(self.df)
+        feature_cols = [c for c in self.df.columns if c != self.target_col]
+        if len(feature_cols) < 2 or self.target_col not in self.df.columns:
+            self._log("Preprocess: insufficient features/target")
+            return self
+        self._log(f"Preprocess: {len(feature_cols)} features ready for modelling")
+        return self
+
+    def build_model(self) -> "FeatureEngineeringPipeline":
+        """Model-building stage: train logistic regression, predict, store results."""
+        # sklearn/scipy steps need pandas
+        if self.backend.is_pyspark:
+            self._log("build_model: converting PySpark -> pandas")
+            self.df = self.backend.to_pandas(self.df)
+            self.backend = get_backend(self.df)
+        feature_cols = [c for c in self.df.columns if c != self.target_col and np.issubdtype(self.df[c].dtype, np.number)]
+        if len(feature_cols) < 2 or self.target_col not in self.df.columns:
+            self._log("Model build: not enough numeric features/target")
+            return self
+        X = self.df[feature_cols].fillna(0)
+        y = self.df[self.target_col]
+        if y.dtype == object or str(y.dtype).startswith("category"):
+            y = pd.Categorical(y).codes
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=self.config.get("advanced", {}).get("random_state", 42))
+        self.model = LogisticRegression(solver="lbfgs", max_iter=1000)
+        self.model.fit(X_train, y_train)
+        self.predictions = self.model.predict(X_test)
+        self.accuracy = accuracy_score(y_test, self.predictions)
+        self._log(f"Model built — Accuracy: {self.accuracy:.3f}")
+        return self
+
+    def run_full(self, data_path=None):
+        """Complete data-science pipeline.
+
+        data cleaning → feature engineering → preprocessing → model building.
+        """
+        self.load(data_path)
+        self.clean_data()          # 1. cleaning
+        self.handle_missing()      # 2. missing-value handling (cleaning sub-step)
+        self.create_features()     # 3. feature engineering
+        self.transform()           # 4. feature transformation
+        self.select_features()     # 5. feature selection
+        self.encode_advanced()     # 6. encoding
+        self.evaluate()            # 7. evaluation (feature-only accuracy)
+        self.preprocess()          # 8. preprocessing for model
+        self.build_model()         # 9. model building
+        self.save_report()
+        self.save_data()
+        self._log("=== FULL DS PIPELINE COMPLETE ===")
         return self
 
     def load(self, path=None):
@@ -48,6 +137,11 @@ class FeatureEngineeringPipeline:
 
     def handle_missing(self) -> "FeatureEngineeringPipeline":
         """Impute missing values (mean for numeric, mode for categorical)."""
+        # sklearn/scipy steps need pandas; convert PySpark lazily
+        if self.backend.is_pyspark:
+            self._log("handle_missing: converting PySpark -> pandas")
+            self.df = self.backend.to_pandas(self.df)
+            self.backend = get_backend(self.df)
         if self.config["advanced"]["handle_missing"]:
             numeric = self.df.select_dtypes(include=[np.number]).columns
             strategy = self.config["advanced"]["imputation_strategy"]
@@ -175,7 +269,7 @@ class FeatureEngineeringPipeline:
         return self
 
     def evaluate(self):
-        feature_cols = [c for c in self.df.columns if c != self.target_col and self.df[c].dtype in [np.float64, np.int64]]
+        feature_cols = [c for c in self.df.columns if c != self.target_col and np.issubdtype(self.df[c].dtype, np.number)]
         if len(feature_cols) < 2 or self.target_col not in self.df.columns:
             self._log("Not enough features/target for evaluation")
             return self
@@ -190,7 +284,16 @@ class FeatureEngineeringPipeline:
         return self
 
     def generate_report(self):
-        lines = ["="*60, "FEATURE ENGINEERING REPORT", "="*60, f"Original: {self.original_shape}", f"Final: {self.df.shape if self.df is not None else 'N/A'}", f"Created: {len(self.created_features)}", f"Selected: {len(self.selected_features)}", f"Transformed: {len(self.transformed_features)}", f"Accuracy: {self.accuracy or 'N/A'}", ""]
+        lines = ["="*60, "DATA SCIENCE PIPELINE REPORT", "="*60,
+                 f"Original: {self.original_shape}",
+                 f"Final: {self.df.shape if self.df is not None else 'N/A'}",
+                 f"Backend: {self.backend.name}",
+                 f"Cleaned: {len(self.cleaned_features)}",
+                 f"Created: {len(self.created_features)}",
+                 f"Selected: {len(self.selected_features)}",
+                 f"Transformed: {len(self.transformed_features)}",
+                 f"Accuracy: {self.accuracy or 'N/A'}",
+                 ""]
         for e in self.log: lines.append(f"  - {e}")
         lines.append("="*60)
         return "\n".join(lines)
@@ -206,12 +309,22 @@ class FeatureEngineeringPipeline:
         path = path or self.config["output"]["output_path"]
         fmt = fmt or self.config["output"]["output_format"]
         Path(path).parent.mkdir(parents=True, exist_ok=True)
-        (self.df.to_csv(path, index=False) if fmt=="csv" else self.df.to_parquet(path, index=False))
+        if self.backend.is_pyspark:
+            if fmt == "csv":
+                self.df.coalesce(1).write.mode("overwrite").option("header", "true").csv(path)
+            else:
+                self.df.write.mode("overwrite").parquet(path)
+        else:
+            (self.df.to_csv(path, index=False) if fmt == "csv" else self.df.to_parquet(path, index=False))
         self._log(f"Data saved to {path}")
         return self
 
     def get_engineered_data(self):
-        return self.df.copy() if self.df is not None else pd.DataFrame()
+        if self.df is None:
+            return pd.DataFrame()
+        if self.backend.is_pyspark:
+            return self.backend.to_pandas(self.df)
+        return self.df.copy()
 
     def run(self, data_path=None):
         """Run the full pipeline on a dataset.
