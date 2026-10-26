@@ -1,0 +1,58 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "feature-engineering-toolkit"
+version = "1.0.0"
+description = "Feature engineering pipeline for ML — create, select, and transform features"
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "MIT" }
+authors = [
+    { name = "Data Science Accelerator" },
+]
+keywords = ["feature-engineering", "machine-learning", "scikit-learn", "pandas", "preprocessing"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering",
+]
+
+dependencies = [
+    "pandas>=1.3.0",
+    "numpy>=1.20.0",
+    "scikit-learn>=1.0.0",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+polars = ["polars>=0.18.0"]
+dev = ["pytest>=7.0.0"]
+
+[project.urls]
+Homepage = "https://github.com/jameslam-stack/feature-engineering-toolkit"
+Repository = "https://github.com/jameslam-stack/feature-engineering-toolkit"
+Documentation = "https://github.com/jameslam-stack/feature-engineering-toolkit#readme"
+Issues = "https://github.com/jameslam-stack/feature-engineering-toolkit/issues"
+
+# Note: This package is NOT published to PyPI.
+# Install from GitHub:  git clone <repo> && pip install -e .
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["feature_engineering_toolkit*"]
+exclude = ["tests*", "examples*", "data*", "models*", "reports*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]

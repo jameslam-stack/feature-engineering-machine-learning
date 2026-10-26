@@ -1,0 +1,85 @@
+# Configuration template for the Feature Engineering Toolkit
+# This file customizes the feature engineering pipeline.
+
+# --- Data Input ---
+data_input:
+  data_path: "data/input.csv"
+  file_type: "csv"
+  csv_separator: ","
+  csv_quotechar: '"'
+  encoding: "utf-8"
+  target_variable: "target"
+  index_column: null
+
+# --- Feature Creation ---
+feature_creation:
+  enabled: true
+  techniques:
+    - "polynomial_features"
+    - "interaction_terms"
+    - "aggregation_features"
+    - "datetime_features"
+  polynomial_features:
+    degree: 2
+    include_bias: false
+  interaction_terms:
+    interaction_degree: 2
+  aggregation_features:
+    group_by: "user_id"
+    aggregations:
+      - "mean"
+      - "sum"
+  datetime_features:
+    datetime_columns:
+      - "date"
+    features_to_extract:
+      - "year"
+      - "month"
+      - "dayofweek"
+
+# --- Feature Selection ---
+feature_selection:
+  enabled: true
+  method: "select_k_best"
+  variance_threshold:
+    threshold: 0.0
+  select_k_best:
+    k: 10
+    score_func: "f_classif"
+  recursive_feature_elimination:
+    n_features_to_select: 10
+    step: 1
+
+# --- Feature Transformation ---
+feature_transformation:
+  enabled: true
+  method: "standard_scaler"
+  standard_scaler: {}
+  min_max_scaler:
+    feature_range: [0, 1]
+  robust_scaler:
+    quantile_range: [25.0, 75.0]
+  power_transformer:
+    method: "yeo-johnson"
+    standardize: true
+  quantile_transformer:
+    n_quantiles: 100
+    output_distribution: "uniform"
+
+# --- Output ---
+output:
+  output_path: "data/processed.csv"
+  output_format: "csv"
+  save_report: true
+  report_path: "reports/feature_engineering_report.html"
+  save_model: false
+  model_path: "models/feature_selection_model.pkl"
+
+# --- Advanced ---
+advanced:
+  n_jobs: -1
+  random_state: 42
+  verbosity: 1
+  handle_missing: true
+  imputation_strategy: "mean"
+  imputation_constant: 0
