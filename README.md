@@ -6,11 +6,20 @@ interaction terms, and importance analysis.
 
 ## Overview
 
-This toolkit implements feature engineering for ML models. It automates:
+This toolkit implements the full data-science pipeline:
+
+**data cleaning → feature engineering → preprocessing → model building**
+
+It automates:
+- **Cleaning** duplicates and missing values
 - **Creating** new features (polynomial, interaction, aggregation, datetime)
 - **Selecting** the most relevant ones (SelectKBest, RFE, variance threshold)
 - **Transforming** them (scaling, power transforms, quantile transforms)
-- **Evaluating** impact on model accuracy
+- **Preprocessing** train/test splits for modelling
+- **Building** a model and evaluating accuracy
+
+Works with **pandas** and **PySpark** DataFrames — the backend is detected
+automatically from whatever you pass in.
 
 ## Installation
 
@@ -29,11 +38,13 @@ pip install scikit-learn pandas numpy pyyaml
 ```
 
 > **Note:** This package is not on PyPI. Use the GitHub install above.
+> PySpark is optional — the pipeline falls back to pandas automatically.
 
 ### Requirements
 
 - Python 3.8+
 - `pandas`, `numpy`, `scikit-learn`, `pyyaml` (installed automatically)
+- `pyspark` (optional, for PySpark DataFrames)
 - `polars` (optional)
 
 ## Quick Start
@@ -44,11 +55,18 @@ from feature_engineering_toolkit import FeatureEngineeringPipeline
 
 df = pd.read_csv('your_data.csv')
 
+# Full DS pipeline: cleaning → feature engineering → preprocessing → model
 pipeline = FeatureEngineeringPipeline(df, target_col='target')
-pipeline.run()  # create → transform → select → evaluate
+pipeline.run_full()
 
 print(pipeline.generate_report())
 engineered = pipeline.get_engineered_data()
+```
+
+Or run the feature-engineering stage only:
+
+```python
+pipeline.run()  # create → transform → select → evaluate
 ```
 
 ## Usage
@@ -58,12 +76,38 @@ engineered = pipeline.get_engineered_data()
 ```python
 pipeline = FeatureEngineeringPipeline(df, target_col='target')
 
+pipeline.clean_data()          # remove duplicates
+pipeline.handle_missing()      # impute missing values
 pipeline.create_features()     # polynomial, interaction, aggregation, datetime
 pipeline.transform()           # scaling, power, quantile
 pipeline.select_features()     # SelectKBest, RFE, variance threshold
 pipeline.encode_advanced()     # target encoding (placeholder)
 pipeline.evaluate()            # accuracy score
+pipeline.preprocess()          # train/test split
+pipeline.build_model()         # train + predict + accuracy
 ```
+
+### Full pipeline (one call)
+
+```python
+pipeline.run_full('/path/to/your_data.csv')
+# cleaning → feature engineering → preprocessing → model building
+```
+
+### PySpark DataFrames
+
+```python
+from pyspark.sql import SparkSession
+spark = SparkSession.builder.appName('fe').getOrCreate()
+df = spark.read.csv('data.csv', header=True)
+
+pipeline = FeatureEngineeringPipeline(df, target_col='target')
+pipeline.run_full()  # backend detected automatically
+```
+
+sklearn-based steps (imputation, scaling, model building) convert the
+PySpark frame to pandas internally and write results back to the
+PySpark format on save.
 
 ### Configuration
 
@@ -92,10 +136,13 @@ feature_selection:
 
 | Feature | Description |
 |---------|-------------|
+| **Data Cleaning** | Duplicate removal, missing-value imputation |
 | **Feature Creation** | Polynomial terms, interaction terms, aggregations, datetime extraction |
 | **Feature Selection** | SelectKBest, RFE, variance threshold |
 | **Feature Transformation** | StandardScaler, MinMaxScaler, RobustScaler, PowerTransformer, QuantileTransformer |
-| **Evaluation** | Model accuracy comparison |
+| **Preprocessing** | Train/test split for modelling |
+| **Model Building** | Logistic regression with accuracy evaluation |
+| **Backends** | pandas + PySpark, auto-detected |
 | **Configuration** | YAML-based config with sensible defaults |
 
 ## Project Structure
@@ -105,6 +152,7 @@ feature-engineering-toolkit/
 ├── feature_engineering_toolkit/   # Source package
 │   ├── __init__.py                # Package exports
 │   ├── pipeline.py                # Main pipeline
+│   ├── backends.py                # pandas / PySpark backend abstraction
 │   └── config.py                  # Config loading
 ├── tests/                         # Test suite
 ├── examples/                      # Tutorial notebooks
