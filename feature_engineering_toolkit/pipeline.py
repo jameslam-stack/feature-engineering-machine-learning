@@ -29,16 +29,31 @@ class FeatureEngineeringPipeline:
         return self
 
     def load(self, path=None):
-        from .config import load_config
         path = path or self.config["data_input"]["data_path"]
         p = Path(path)
-        if not p.exists():
-            alt = Path("data") / p.name
-            if alt.exists(): p = alt
+        candidates = [p, Path("data") / p.name, Path(__file__).parent.parent / "data" / p.name]
+        for cand in candidates:
+            if cand.exists():
+                p = cand
+                break
+        else:
+            raise FileNotFoundError(f"Could not find data file: {path}")
         fmt = self.config["data_input"]["file_type"]
         self.df = pd.read_csv(str(p)) if fmt == "csv" else pd.read_parquet(str(p))
         self.original_shape = self.df.shape
         self._log(f"Loaded: {self.df.shape[0]}x{self.df.shape[1]} from {p}")
+        return self
+
+    def handle_missing(self) -> "FeatureEngineeringPipeline":
+        """Impute missing values (mean for numeric, mode for categorical)."""
+        if self.config["advanced"]["handle_missing"]:
+            numeric = self.df.select_dtypes(include=[np.number]).columns
+            strategy = self.config["advanced"]["imputation_strategy"]
+            for col in numeric:
+                if self.df[col].isnull().sum() > 0:
+                    fill = self.df[col].mean() if strategy == "mean" else self.df[col].median() if strategy == "median" else 0
+                    self.df[col] = self.df[col].fillna(fill)
+                    self._log(f"Imputed '{col}' with {strategy}: {fill:.2f}")
         return self
 
     def create_features(self):
@@ -185,9 +200,10 @@ class FeatureEngineeringPipeline:
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         (self.df.to_csv(path, index=False) if fmt=="csv" else self.df.to_parquet(path, index=False))
         self._log(f"Data saved to {path}")
+        return self
 
     def get_engineered_data(self):
         return self.df.copy() if self.df is not None else pd.DataFrame()
 
     def run(self):
-        return (self.load().create_features().transform().select_features().encode_advanced().evaluate().save_report().save_data())
+        return (self.load().handle_missing().create_features().transform().select_features().encode_advanced().evaluate().save_report().save_data())

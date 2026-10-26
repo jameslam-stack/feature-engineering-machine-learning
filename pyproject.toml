@@ -40,10 +40,10 @@ polars = ["polars>=0.18.0"]
 dev = ["pytest>=7.0.0"]
 
 [project.urls]
-Homepage = "https://github.com/jameslam-stack/feature-engineering-toolkit"
-Repository = "https://github.com/jameslam-stack/feature-engineering-toolkit"
-Documentation = "https://github.com/jameslam-stack/feature-engineering-toolkit#readme"
-Issues = "https://github.com/jameslam-stack/feature-engineering-toolkit/issues"
+Homepage = "https://github.com/jameslam-stack/feature-engineering-machine-learning"
+Repository = "https://github.com/jameslam-stack/feature-engineering-machine-learning"
+Documentation = "https://github.com/jameslam-stack/feature-engineering-machine-learning#readme"
+Issues = "https://github.com/jameslam-stack/feature-engineering-machine-learning/issues"
 
 # Note: This package is NOT published to PyPI.
 # Install from GitHub:  git clone <repo> && pip install -e .

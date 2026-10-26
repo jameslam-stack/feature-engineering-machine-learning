@@ -18,7 +18,7 @@ Install directly from GitHub (clone the repo, then install in editable mode):
 
 ```bash
 # 1. Clone the repo
-git clone https://github.com/jameslam-stack/feature-engineering-toolkit.git
+git clone https://github.com/jameslam-stack/feature-engineering-machine-learning.git
 cd feature-engineering-toolkit
 
 # 2. Install (editable mode — no PyPI required)
