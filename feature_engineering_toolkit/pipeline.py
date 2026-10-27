@@ -117,21 +117,50 @@ class FeatureEngineeringPipeline:
         self._log("=== FULL DS PIPELINE COMPLETE ===")
         return self
 
-    def load(self, path=None):
-        """Load a dataset from any path. Falls back to the bundled sample data if no path is given."""
+    def load(self, path=None, fmt=None):
+        """Load a dataset from any path. Falls back to the bundled sample data
+        if no path is given.
+
+        Parameters
+        ----------
+        path : str or Path, optional
+            Path to your CSV / Parquet file. If omitted, uses the configured
+            path (falls back to the bundled sample data).
+        fmt : str, optional
+            File format override: ``"csv"`` or ``"parquet"``. If None,
+            inferred from the file extension or configuration.
+        """
         path = path or self.config["data_input"]["data_path"]
         p = Path(path)
-        # Search: given path → data/ in cwd → bundled sample in package data/
+        # Search: given path -> data/ in cwd -> bundled sample in package data/
         candidates = [p, Path("data") / p.name, Path(__file__).parent.parent / "data" / p.name]
+        found = None
         for cand in candidates:
-            if cand.exists():
-                p = cand
-                break
-        else:
+            if cand.exists() and cand.is_file():
+                found = cand; break
+        if found is None:
+            # Last resort: try the bare path (may be a URL or non-local location)
+            if p.exists() and p.is_file():
+                found = p
+        if found is None:
             raise FileNotFoundError(f"Could not find data file: {path}")
-        fmt = self.config["data_input"]["file_type"]
-        self.df = pd.read_csv(str(p)) if fmt == "csv" else pd.read_parquet(str(p))
+        p = found
+        # Format priority: explicit fmt arg > file extension > config file_type
+        if fmt:
+            file_fmt = fmt
+        elif str(p).lower().endswith((".parquet", ".pq")):
+            file_fmt = "parquet"
+        elif str(p).lower().endswith((".csv", ".tsv")):
+            file_fmt = "csv"
+        else:
+            file_fmt = self.config["data_input"].get("file_type", "csv")
+        encoding = self.config["data_input"].get("encoding", "utf-8")
+        if file_fmt == "parquet":
+            self.df = pd.read_parquet(str(p))
+        else:
+            self.df = pd.read_csv(str(p), encoding=encoding)
         self.original_shape = self.df.shape
+        self.backend = get_backend(self.df)
         self._log(f"Loaded: {self.df.shape[0]}x{self.df.shape[1]} from {p}")
         return self
 
