@@ -47,6 +47,27 @@ pip install scikit-learn pandas numpy pyyaml
 - `pyspark` (optional, for PySpark DataFrames)
 - `polars` (optional)
 
+## Encoding Categorical Features
+
+You can tell the pipeline exactly which columns to encode — one-hot or
+ordinal — by passing `encode_methods` to the constructor:
+
+```python
+from feature_engineering_toolkit import FeatureEngineeringPipeline
+
+specs = [
+    ("product_category", "one_hot"),   # many categories → dummy columns
+    ("size_category", "ordinal")        # ordered categories → integer codes
+]
+
+pipeline = FeatureEngineeringPipeline(df, target_col="Strong_Outcome",
+                                      encode_methods=specs)
+pipeline.run_full()
+```
+
+`encode_methods` is a list of `(column_name, type)` tuples where `type`
+is `"one_hot"` or `"ordinal"`. Columns not listed are left unchanged.
+
 ## Quick Start
 
 ```python

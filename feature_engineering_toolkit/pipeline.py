@@ -9,7 +9,9 @@ import numpy as np
 from datetime import datetime
 from typing import Optional, Dict, List, Any, Union
 from pathlib import Path
-from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler, PowerTransformer, QuantileTransformer
+from sklearn.preprocessing import (StandardScaler, MinMaxScaler, RobustScaler,
+                                     PowerTransformer, QuantileTransformer,
+                                     OneHotEncoder, OrdinalEncoder)
 from sklearn.model_selection import train_test_split
 from sklearn.feature_selection import SelectKBest, f_classif, RFE
 from sklearn.linear_model import LogisticRegression
@@ -18,16 +20,20 @@ from sklearn.metrics import accuracy_score
 from .backends import get_backend, DataFrameBackend
 
 class FeatureEngineeringPipeline:
-    def __init__(self, df=None, config=None, target_col=None):
+    def __init__(self, df=None, config=None, target_col=None, encode_methods=None):
         from .config import DEFAULT_CONFIG
         self.config = config or DEFAULT_CONFIG.copy()
         self.df = df.copy() if df is not None else None
         self.target_col = target_col or self.config["data_input"]["target_variable"]
         self.backend: DataFrameBackend = get_backend(self.df)
+        # encode_methods: list of (column, type) tuples, e.
+        # [("category", "one_hot"), ("size", "ordinal")]
+        self.encode_methods = encode_methods or []
         self.created_features = []
         self.selected_features = []
         self.transformed_features = []
         self.cleaned_features = []
+        self.encoded_features = []
         self.model = None
         self.predictions = None
         self.log = []
@@ -113,7 +119,7 @@ class FeatureEngineeringPipeline:
             self._log(f"Using provided {self.backend.name} DataFrame; shape={self.df.shape}")
         elif data_path is not None:
             self.load(data_path)
-        else:
+        elif self.df is None:
             import warnings
             warnings.warn(
                 "No df or data_path given; falling back to bundled sample data."
@@ -121,13 +127,14 @@ class FeatureEngineeringPipeline:
             self.load()
         self.clean_data()          # 1. cleaning
         self.handle_missing()      # 2. missing-value handling (cleaning sub-step)
-        self.create_features()     # 3. feature engineering
-        self.transform()           # 4. feature transformation
-        self.select_features()     # 5. feature selection
-        self.encode_advanced()     # 6. encoding
-        self.evaluate()            # 7. evaluation (feature-only accuracy)
-        self.preprocess()          # 8. preprocessing for model
-        self.build_model()         # 9. model building
+        self.encode_features()     # 3. one-hot / ordinal encoding of categorical cols
+        self.create_features()     # 4. feature engineering
+        self.transform()           # 5. feature transformation
+        self.select_features()     # 6. feature selection
+        self.encode_advanced()     # 7. encoding (placeholder)
+        self.evaluate()            # 8. evaluation (feature-only accuracy)
+        self.preprocess()          # 9. preprocessing for model
+        self.build_model()         # 10. model building
         self.save_report()
         self.save_data()
         self._log("=== FULL DS PIPELINE COMPLETE ===")
@@ -313,6 +320,42 @@ class FeatureEngineeringPipeline:
         self._log("Advanced encoding: placeholder (install feature-engine for target encoding)")
         return self
 
+    def encode_features(self, encode_methods=None):
+        """Apply one-hot or ordinal encoding to categorical columns.
+
+        Parameters
+        ----------
+        encode_methods : list of (column, type), optional
+            Each tuple is ``(column_name, encoding_type)`` where
+            ``encoding_type`` is ``"one_hot"`` or ``"ordinal"``. If omitted,
+            uses the ``encode_methods`` passed at construction.
+        """
+        if self.backend.is_pyspark:
+            self._log("encode_features: converting PySpark -> pandas")
+            self.df = self.backend.to_pandas(self.df)
+            self.backend = get_backend(self.df)
+        specs = encode_methods if encode_methods is not None else self.encode_methods
+        if not specs:
+            self._log("encode_features: no encoding specs provided")
+            return self
+        for col, enc_type in specs:
+            if col not in self.df.columns:
+                self._log(f"encode_features: '{col}' not in DataFrame, skipping")
+                continue
+            if enc_type == "one_hot":
+                dummies = pd.get_dummies(self.df[col], prefix=col, drop_first=False)
+                self.df = pd.concat([self.df.drop(columns=[col]), dummies], axis=1)
+                self.encoded_features.extend(dummies.columns.tolist())
+                self._log(f"One-hot encoded '{col}' -> {len(dummies.columns)} columns")
+            elif enc_type == "ordinal":
+                codes = pd.Categorical(self.df[col]).codes
+                self.df[col] = codes
+                self.encoded_features.append(col)
+                self._log(f"Ordinal encoded '{col}' -> {self.df[col].nunique()} levels")
+            else:
+                self._log(f"encode_features: unknown encoding type '{enc_type}' for '{col}'")
+        return self
+
     def evaluate(self):
         feature_cols = [c for c in self.df.columns if c != self.target_col and np.issubdtype(self.df[c].dtype, np.number)]
         if len(feature_cols) < 2 or self.target_col not in self.df.columns:
@@ -392,8 +435,9 @@ class FeatureEngineeringPipeline:
             self._log(f"Using provided {self.backend.name} DataFrame; shape={self.df.shape}")
         elif data_path is not None:
             self.load(data_path)
-        else:
+        elif self.df is None:
             import warnings
             warnings.warn("No df or data_path given; using bundled sample.")
             self.load()
-        return (self.handle_missing().create_features().transform().select_features().encode_advanced().evaluate().save_report().save_data())
+        return (self.handle_missing().encode_features().create_features().transform()
+                .select_features().encode_advanced().evaluate().save_report().save_data())
