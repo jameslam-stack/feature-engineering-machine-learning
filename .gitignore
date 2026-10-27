@@ -21,3 +21,5 @@ data/processed.csv
 data/processed.parquet
 reports/
 models/
+*.csv
+*.parquet
