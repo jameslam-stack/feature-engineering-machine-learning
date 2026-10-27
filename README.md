@@ -94,7 +94,30 @@ pipeline.run_full('/path/to/your_data.csv')
 # cleaning → feature engineering → preprocessing → model building
 ```
 
-### Loading Your Own Data
+### Direct DataFrame Input
+
+The pipeline accepts a **pandas or PySpark DataFrame** directly — the
+backend is auto-detected from whatever you pass in, so no configuration
+is needed:
+
+```python
+import pandas as pd
+from feature_engineering_toolkit import FeatureEngineeringPipeline
+
+# Pass the frame to the constructor (auto-detected backend)
+pipeline = FeatureEngineeringPipeline(df, target_col='target')
+pipeline.run_full()
+
+# Or pass it at run time
+pipeline = FeatureEngineeringPipeline(target_col='target')
+pipeline.run_full(df=df)
+```
+
+PySpark frames are detected automatically and converted to pandas
+internally for the sklearn-based steps (imputation, scaling, model
+building); results are written back to PySpark on save.
+
+### Loading From Disk
 
 The pipeline reads any CSV or Parquet file via `load(path=)` (or the
 `data_path` argument to `run_full`). **If no path is given it falls back
@@ -125,9 +148,6 @@ Supported formats are controlled by `config["data_input"]["file_type"]`
 ```python
 pipeline.load("/path/to/my_data.parquet", fmt="parquet")
 ```
-
-Supported formats are controlled by `config["data_input"]["file_type"]`
-(`"csv"` by default, or `"parquet"`).
 
 ```python
 from pyspark.sql import SparkSession
