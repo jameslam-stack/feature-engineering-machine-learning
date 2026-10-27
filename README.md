@@ -97,8 +97,8 @@ pipeline.run_full('/path/to/your_data.csv')
 ### Loading Your Own Data
 
 The pipeline reads any CSV or Parquet file via `load(path=)` (or the
-`data_path` argument to `run_full`). If no path is given it falls back
-to the bundled sample dataset — so always pass your file explicitly:
+`data_path` argument to `run_full`). **If no path is given it falls back
+to the bundled sample dataset** — so always pass your file explicitly:
 
 ```python
 import pandas as pd
@@ -117,6 +117,13 @@ Or let the pipeline load it from disk:
 ```python
 pipeline = FeatureEngineeringPipeline(target_col="churn")
 pipeline.run_full("/path/to/my_data.csv")  # any CSV / Parquet
+```
+
+Supported formats are controlled by `config["data_input"]["file_type"]`
+(`"csv"` by default, or `"parquet"`), or passed explicitly:
+
+```python
+pipeline.load("/path/to/my_data.parquet", fmt="parquet")
 ```
 
 Supported formats are controlled by `config["data_input"]["file_type"]`

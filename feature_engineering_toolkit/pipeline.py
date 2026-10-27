@@ -101,7 +101,20 @@ class FeatureEngineeringPipeline:
         """Complete data-science pipeline.
 
         data cleaning → feature engineering → preprocessing → model building.
+
+        Parameters
+        ----------
+        data_path : str or Path, optional
+            Path to any CSV/Parquet dataset. If None, uses the configured
+            path (defaults to a bundled sample — change ``config_template.yaml``
+            or pass your own path to load custom data).
         """
+        if data_path is None:
+            import warnings
+            warnings.warn(
+                "No data_path given; falling back to configuration / bundled "
+                "sample data. Pass a path to load your own dataset."
+            )
         self.load(data_path)
         self.clean_data()          # 1. cleaning
         self.handle_missing()      # 2. missing-value handling (cleaning sub-step)
